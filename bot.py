@@ -7,37 +7,20 @@ import discord
 from discord.ext import commands
 
 import config
+from cogs.util.file_handling import load_cog
 
 description = '''Hello! I am a basic bot'''
 
 log = logging.getLogger(__name__)
 
 initial_extensions = [
-    'cogs.admin',
-    'cogs.mtg',
-    'cogs.reactions',
-    'cogs.timer'
+    'admin',
+    'mtg',
+    'reactions',
+    'timer'
 ]
 
-def load_cog(bot, cog):
-    try:
-        bot.load_extension(cog)
-        print(f'Loaded extension {cog}.')
-        return True
-    except Exception as e:
-        print(f'Failed to load extension {cog}.', file=sys.stderr)
-        traceback.print_exc()
-        return False
 
-def unload_cog(bot, cog):
-    try:
-        bot.unload_extension(cog)
-        print(f'Unloaded extension {cog}.')
-        return True
-    except Exception as e:
-        print(f'Failed to unload extension {cog}.', file=sys.stderr)
-        traceback.print_exc()
-        return False
 
 class Toast(commands.Bot):
     def __init__(self):

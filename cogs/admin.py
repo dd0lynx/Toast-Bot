@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
-from bot import load_cog, unload_cog, initial_extensions
+from bot import initial_extensions
+from cogs.util.file_handling import load_cog, unload_cog
 
 class Admin(commands.Cog):
 

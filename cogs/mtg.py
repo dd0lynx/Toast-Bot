@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 
 api_url = 'https://api.scryfall.com'
+max_size = 20
 
 class MTG(commands.Cog):
 
@@ -26,7 +27,7 @@ class MTG(commands.Cog):
             response = requests.get(f'{api_url}/cards/search',
                                     params={'q': query})
             if response:
-                card_list = response.json()['data'][:20]
+                card_list = response.json()['data'][:max_size]
                 results = '\n'.join(card['name'] for card in card_list)
                 await ctx.send(f'Top results for "{query}"\n{results}')
             else:
@@ -37,20 +38,19 @@ class MTG(commands.Cog):
         # performs an exact search first
         response = requests.get(f'{api_url}/cards/named',
                                 params={'exact': card_name})
+        asyncio.sleep(0.1)
         if not response:
-            asyncio.sleep(0.2)
             # performs a fuzzy search if the exact search failed
             response = requests.get(f'{api_url}/cards/named',
                                     params={'fuzzy': card_name})
+            asyncio.sleep(0.1)
         if not response:
-            asyncio.sleep(0.2)
             # performs a general seach for cards matching
             # the name in the case of multiple
             # cards matching search name
             found = False
             response = requests.get(f'{api_url}/cards/search',
                                     params={'q': card_name})
-        if found:
             asyncio.sleep(0.1)
         return found, response
 
@@ -77,15 +77,26 @@ class MTG(commands.Cog):
                            'return a list of card names')
         else:
             card_found, card_response = self.card_scryfall(card_name)
-            if card_found:
-
-                card = card_response.json()
-                print(f'embeding card {card["name"]}')
-                rulings_response = requests.get(card['rulings_uri'])
-                embed = self.embed_card(card, rulings_response)
-                await ctx.send(embed=embed)
+            if card_response:
+                if card_found:
+                    # Scryfall seach returned an isntance of a card
+                    card = card_response.json()
+                    print(f'embeding card {card["name"]}')
+                    rulings_response = requests.get(card['rulings_uri'])
+                    embed = self.embed_card(card, rulings_response)
+                    await ctx.send(embed=embed)
+                else:
+                    # The api call either didn't find a card or found
+                    # multiple cards with the search and the name needs
+                    # to be more specific
+                    suggested_cards = card_response.json()['data']
+                    if len(suggested_cards > 0):
+                        ctx.send('More than 1 card found, here\'s ' +
+                                 'a list of suggested card name:\n' +
+                                 "\n".join(card["name"] for card in suggested_cards))
             else:
-                ctx.send('card not found, remind creator to fucing finish this')
+                ctx.send('Search failed. Card either doesn\'t exist ' +
+                         'on scryfall or I\'m broken')
 
     @mtg.group(name='deck')
     async def deck(self, ctx):

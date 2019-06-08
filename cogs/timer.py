@@ -2,6 +2,7 @@ import os, os.path
 import errno
 import json
 import asyncio
+from datetime import datetime, timedelta
 import discord
 from discord.ext import commands, tasks
 
@@ -28,8 +29,6 @@ def parse_time(time):
     h = 0
     m = 0
     s = 0
-    print(len(time))
-    print(time)
     for i in range(len(time)):
         if time[i] in isYear:
             y = int(time[i - 1])
@@ -53,16 +52,16 @@ def parse_time(time):
     return date.strftime('%b %d %Y %I:%M%p')
 
 def timer_calc(name, timer):
-    setTime = datetime.strptime(timer['setTime'], '%b %d %Y %I:%M%p')
-    timeRemaining = setTime - datetime.now()
+    set_time = datetime.strptime(timer['set_time'], '%b %d %Y %I:%M%p')
+    time_remaining = set_time - datetime.now()
 
-    if datetime.now() > setTime:
+    if datetime.now() > set_time:
         return '**{}**\nDone'.format(name)
-    years = timeRemaining.days // 365.25
-    days = timeRemaining.days
-    hours = timeRemaining.seconds // 3600
-    minutes = (timeRemaining.seconds - hours * 3600) // 60
-    seconds = timeRemaining.seconds - hours * 3600 - minutes * 60
+    years = time_remaining.days // 365.25
+    days = time_remaining.days
+    hours = time_remaining.seconds // 3600
+    minutes = (time_remaining.seconds - hours * 3600) // 60
+    seconds = time_remaining.seconds - hours * 3600 - minutes * 60
 
     if years > 0:
         return '**{}**\n{} years {} days {} hours {} minutes {} seconds'.format(name, years, days, hours, minutes, seconds)
@@ -89,6 +88,40 @@ class Timer(commands.Cog):
                                                   'timer_channel': None,
                                                   'timer_message': None }}
         f.save_json(timers_json, self.timers)
+        self.run_timers.start()
+
+    @tasks.loop(seconds=1.0)
+    async def run_timers(self):
+        for guild in self.bot.guilds:
+            guild_id = str(guild.id)
+            timers = self.timers[guild_id]['timers']
+            settings = self.timers[guild_id]['settings']
+            if len(timers) > 0:
+                channel_id = int(settings['timer_channel'])
+                channel = self.bot.get_channel(channel_id)
+                message_id = int(settings['timer_message'])
+                message = await channel.fetch_message(message_id)
+                content = '\n'.join(timer_calc(name, timer) for name, timer in timers.items())
+                await message.edit(content=content)
+
+    @commands.command()
+    async def timerstest(self, ctx):
+        for guild in self.bot.guilds:
+            guild_id = str(guild.id)
+            timers = self.timers[guild_id]['timers']
+            settings = self.timers[guild_id]['settings']
+            if len(timers) > 0:
+                channel_id = int(settings['timer_channel'])
+                channel = self.bot.get_channel(channel_id)
+                message_id = int(settings['timer_message'])
+                message = await channel.fetch_message(message_id)
+                content = '\n'.join(timer_calc(name, timer) for name, timer in timers.items())
+                await message.edit(content=content)
+
+    @run_timers.before_loop
+    async def before_printer(self):
+        print('timers waiting...')
+        await self.bot.wait_until_ready()
 
     async def on_guild_join(self, ctx, guild):
         if str(guild.id) not in self.timers:
@@ -101,6 +134,17 @@ class Timer(commands.Cog):
     async def timer(self, ctx):
         if ctx.subcommand_passed is None:
             await ctx.send('subcommands are: [create], [remove], [list], [repost], [set]')
+
+    @timer.command(name='start', hidden=True)
+    @commands.is_owner()
+    async def start(self, ctx):
+        self.run_timers.start()
+        await ctx.send('timers started')
+
+    @timer.command(name='stop', hidden=True)
+    @commands.is_owner()
+    async def stop(self, ctx):
+        self.run_timers.stop('timers stoped')
 
     @timer.command(name='create')
     async def create(self, ctx, name, *, time):
@@ -118,7 +162,7 @@ class Timer(commands.Cog):
     #         await ctx.send('An error has happened')
 
     @timer.command(name='remove')
-    async def remove(self, ctx):
+    async def remove(self, ctx, name):
         guild = str(ctx.guild.id)
         del self.timers[guild]['timers'][name]
         f.save_json(timers_json, self.timers)
@@ -132,7 +176,7 @@ class Timer(commands.Cog):
     @timer.command(name='repost')
     async def repost(self, ctx):
         guild = str(ctx.guild.id)
-        channel_id = self.timers['settings']['timer_channel']
+        channel_id = self.timers[guild]['settings']['timer_channel']
         timer_channel = self.bot.get_channel(int(channel_id))
         msg = await timer_channel.send("Timers go here")
         self.timers[guild]['settings']['timer_message'] = str(msg.id)
